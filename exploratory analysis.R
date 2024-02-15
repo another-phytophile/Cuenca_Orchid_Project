@@ -10,9 +10,6 @@ library(compareDF)
 # Import
 raworchids=read_excel("Data/Tabla_de_medidas.xlsx") %>% as_tibble()
 
-help("read_excel")
-print(raworchids,n=30)
-
 # Data Cleaning
 
 #Create Simpler Names
@@ -22,8 +19,10 @@ names(raworchids) <- c("es","med","p","nr","r","lr","l")
 orchids <-  raworchids %>% fill(es, med, p, nr, l) %>%
   mutate(l = as.factor(l)) %>%
   mutate(es = as.factor(es)) %>%
-  mutate(med = as.factor(med)) %>%
-  filter(!grepl("N", orchids$p) | is.na(p))
+  mutate(med = as.factor(med))
+
+# Remove Blank data (will create dummy data later)
+orchids <-   filter(orchids,!grepl("N",p) | is.na(p))
 
 # Average Root Numbers and Root Length
 
@@ -52,4 +51,4 @@ orchidsfinal <- orchidsrn %>% select(-nr2,-nr1) %>%
           nr=0
                                       )
 write.csv(orchidsfinal,"finaltest.csv")
-help("rep")
+
