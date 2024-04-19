@@ -15,11 +15,14 @@ raworchids=read_excel("Data/Tabla_de_medidas.xlsx") %>% as_tibble()
 #Create Simpler Names
 names(raworchids) <- c("es","med","p","nr","r","lr","l")
 
+orchids$med
 # Assign Values to Merged Data
 orchids <-  raworchids %>% fill(es, med, p, nr, l) %>%
   mutate(l = as.factor(l)) %>%
   mutate(es = as.factor(es)) %>%
   mutate(med = as.factor(med))
+  
+
 
 # Remove Blank data (will create dummy data later)
 orchids <-   filter(orchids,!grepl("N",p) | is.na(p))
@@ -41,14 +44,19 @@ orchidsrn <- orchidsum %>% mutate(nr = ifelse(nr1 == 0, 0,
   ungroup()
 
 # Create Dummy/Assumed Data for 11, 0.5
-orchidsfinal <- orchidsrn %>% select(-nr2,-nr1) %>% 
-  add_row(es=c(rep(as.factor(11),14)),
-          med=c(rep(as.factor(0.5),14)),
-          l=c(rep(as.factor("Oscuridad"),7),
-              rep(as.factor("Luz"),7)),
-          p=c(as.character(1:14)),
-          rnum=0,
-          nr=0
-                                      )
-write.csv(orchidsfinal,"finaltest.csv")
+orchidsfinal <- orchidsrn %>% select(-nr2,-nr1) %>%
+  add_row(
+    es = c(rep(as.factor(11), 19)),
+    med = c(rep(as.factor(0.5), 19)),
+    l = c(rep(as.factor("Oscuridad"), 11), rep(as.factor("Luz"), 8)),
+    p = c(as.character(1:19)),
+    rnum = 0,
+    nr = 0
+  ) %>%
+  mutate(IBAconc = case_when(med == "P4" ~ 0,
+                             med == '0.5' ~ 5,
+                             med == '1' ~ 1))
+
+
+write.csv(orchidsfinal,"Data/finaltest.csv")
 

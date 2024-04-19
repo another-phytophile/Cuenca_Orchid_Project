@@ -1,0 +1,319 @@
+---
+title: "Análysis de Datos de Orquídeas"
+author: "Ciro (Haozhe) Yu"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(readxl)
+library(MASS)
+library(AER)
+library(tidyverse)
+library(here)
+library(tinytex)
+library(haven)
+library(lsmeans)
+library(lmtest)
+```
+
+# Data Import
+
+- Import Data from the Tabla_de_medidas.xlsx data fila: 
+
+```{r insertar}
+raworchids=read_excel("Data/Tabla_de_medidas.xlsx") %>% as_tibble()
+
+```
+
+
+# Data Cleaning
+
+Data Cleaning Steps for This Project Include:
+
+- Nicknaming the Attributes to make them easier to code.
+- Converting the light, species, and medium attributes into factors.
+- Inserting in the Data for the *Cattleya maxima* in darkness and IBA concentration of 5 mg/L. 
+- Average the Observations at each root to generalize to each plant. 
+- Assign the higher root number to the plant if 2 root values were included incorrectly. 
+
+```{r limpeza de datos}
+#Create Simpler Names
+names(raworchids) <- c("es","med","p","nr","r","lr","l")
+
+# Assign Values to Merged Data
+orchids <-  raworchids %>% fill(es, med, p, nr, l) %>%
+  mutate(l = as.factor(l)) %>%
+  mutate(es = as.factor(es)) %>%
+  mutate(med = as.factor(med))
+
+# Remove Blank data (will create dummy data later)
+orchids <-   filter(orchids,!grepl("N",p) | is.na(p))
+
+# Sum values
+orchidsum <-
+  orchids %>% 
+  group_by(es, med, l, p) %>% 
+  summarise(rnum = mean(lr),nr1=last(nr),nr2=n()) 
+
+# Get correct Root Number Values
+orchidsrn <- orchidsum %>% mutate(nr = ifelse(nr1 == 0, 0,
+                                              ifelse(nr1 >= nr2, nr1, nr2))) %>%
+  ungroup()
+
+# Create Dummy/Assumed Data for 11, 0.5
+orchidsfinal <- orchidsrn %>% select(-nr2, -nr1) %>%
+  add_row(
+    es = c(rep(as.factor(11), 19)),
+    med = c(rep(as.factor(0.5), 19)),
+    l = c(rep(as.factor("Oscuridad"), 11), rep(as.factor("Luz"), 8)),
+    p = c(as.character(1:19)),
+    rnum = 0,
+    nr = 0
+  ) %>%
+  mutate(IBAconc = case_when(med == "P4" ~ 0,
+                             med == '0.5' ~ 5,
+                             med == '1' ~ 1))
+
+orchidsfinal$med <- relevel(orchidsfinal$med,ref = "P4")
+orchidsfinal$l <- relevel(orchidsfinal$l,ref = "Oscuridad")
+```
+
+
+# Data Analysis
+
+## Exploratory Data Analysis
+
+We first plotted the distribution of the 2 analysis variables, Average Root Length and Number of Root.
+
+```{r exp ana}
+# Logidud de Raices
+ggplot(orchidsfinal,aes(rnum)) + 
+  geom_histogram(fill="darkgreen") +
+    labs(
+    title = paste("Gráfico Histogram de Longitud Promedio de Raíces de la Orquideas"),
+    subtitle = "de Ciro Yu"
+  ) +
+  xlab("Longitud Promedio de Raíces") +
+  ylab("Cantidad")
+
+```
+
+We see here that our data has a lot of 0s and a few large outlines on the right. While those points raise a concern, the central distribution of the roots looks approximately normal. Thus we continue with our analysis. 
+
+
+```{r exp ana2}
+# Numero de Raices
+ggplot(orchidsfinal,aes(nr)) + 
+  geom_histogram(fill="brown") +
+    labs(
+    title = paste("Gráfico Histogram de Numero de Raíces de la Orquideas"),
+    subtitle = "de Ciro Yu"
+  ) +
+  xlab("Numero de Raíces") +
+  ylab("Cantidad")
+```
+
+We see here that the data does not look normal at all. There are a very large number of 0s and a big right tail of large numbers. As a result, we decided to use a GLM approach using models based on the poisson and negative binomial distributions. Further preliminary analysis (not shown) demonstrated that the negative binomial distribution was superior. 
+
+
+## ANOVA Analysis
+
+
+Data for Average Root Length was analyzed with a 2 Way ANOVA. Each species was analyzed as a separate experiment. The linear effects model below was fit to the data for Average Root Length. the model for this analysis is below:  
+
+$$Y_{ijk} = \mu  + \alpha_i + \beta_j + \alpha \beta_{ij} + \epsilon_{ijk}$$
+
+Where:
+
+- $Y_{ijk}$ = the average root length of the individual plant. 
+- $\alpha_i$ = the fixed effect of the media the plant was cultured in. 
+- $\beta_j$ = the fixed effect of the condition (light vs darkness) the plant was grown in.
+- $\alpha \beta_{ij}$ = the fixed effect of the interaction between condition and media. 
+- $\epsilon_{ijk}$  iid $N(0,\sigma^2)$ = The residual variance.
+
+
+Meanwhile, the data for number of roots was analyzed with a Negative Binomial regression model.  The model for this analysis is below: 
+
+$$log(\mu) = \alpha_i + \beta_j + \alpha \beta_{ij}$$
+
+- $\mu$ - the expected value of the number of roots
+- $\alpha_i$ = the fixed effect of the media the plant was cultured in. 
+- $\beta_j$ = the fixed effect of the condition (light vs darkness) the plant was grown in.
+- $\alpha \beta_{ij}$ = the fixed effect of the interaction between condition and media. 
+
+### Subexperiment 1: *Cymbidium* Hybrid (10)
+
+#### Trait 1: Average Root Length
+
+Assumption Testing: 
+
+```{r cym 1}
+cym <-  orchidsfinal %>% filter(es=="10")
+cymrnummIBA <- lm(rnum~IBAconc*l,cym)
+
+#Residuals
+cymrnummIBAr <- tibble(
+  "fit" = cymrnummIBA$fitted.values,
+  "resid" = cymrnummIBA$residuals) %>% 
+  add_column("rstandardized"=rstandard(cymrnummIBA))
+
+ggplot(cymrnummIBAr,aes(x=fit,y=resid))+
+  geom_jitter(color="#226b26")+
+  geom_hline(yintercept = 0, linetype="dotted")+
+  labs(title = paste("Gráfico Residual de Longitud Promedio de Raíces del Híbrido Cymbiudium (10)"),
+       subtitle = "de Ciro Yu")+ 
+  ylab("Residuals")+
+  xlab("Bondad de Ajuste")+
+  theme(plot.title = element_text(size = 14))
+
+bptest(cymrnummIBA,studentize = FALSE)
+
+ggplot(data = cymrnummIBAr, aes(sample = resid))+
+  geom_qq( color="#3dbc42")+
+  geom_qq_line( color="#273d67")+
+  labs(
+    title = paste("Gráfico QQ de Longitud Promedio de Raíces del Híbrido Cymbidium (10)"),
+    subtitle = "de Ciro Yu"
+  ) +
+  xlab("Cuantiles teóricos")+
+  ylab("Cuantiles de muestra")
+
+shapiro.test(cymrnummIBA$residuals)
+```
+
+The residual plot lacks any patterns, indicating constant error variance. Additionally, the Breusch-Pagan test is not significant, further indicating constant error variance. 
+
+The residual plot lacks any patterns, which also indicates linearity. 
+
+The QQ plot is reasonably well fitted to the line, indicating normality of error variance. Additionally, the Shapiro-Wilk test is not significant, further indicating normality. 
+
+Independence is assumed due to the randomization of the experiment. 
+
+The assumptions for linear regression are met and we can proceed. 
+
+
+ANOVA Analysis
+
+```{r cym2}
+summary(cymrnummIBA)
+```
+
+
+The Overall F value of the model is `r summary(cymrnummIBA)$fstatistic[1]` with `r summary(cymrnummIBA)$fstatistic[2]` degrees of freedom for the model and `r summary(cymrnummIBA)$fstatistic[3]` degrees of freedom for the error. This gives us a total p value of `r 1-pf(summary(cymrnummIBA)$fstatistic[1],summary(cymrnummIBA)$fstatistic[2],summary(cymrnummIBA)$fstatistic[3])`. At $\alpha$ = 0.05, p > $\alpha$, so we fail to reject the null hypothesis. That means for average root length, there is not enough evidence to support that either light or media influence average root length for our *Cymbidium* hybrid. 
+
+#### Trait 2: Root Number
+
+Assumption Testing: 
+
+```{r cym 3}
+dispersiontest(glm(nr~IBAconc*l,cym,family=poisson))
+```
+
+From our exploratory analysis, we have already determined that the because the number of roots is an integer number, and that the distribution of the number of roots per plant fits a poisson or negative binomial distribution. Furthermore we can assume independence from randomization. Therefore, to evaluate which distribution is more appropriate, we run a dispersion test using `dispersiontest`. Since the p value is so small, we conclude that there is evidence for overdispersion, and that therefore a negative binomial is more appropriate. 
+
+Negative Binomial Analysis
+
+```{r cym 4}
+cymnrm <- glm.nb(nr~IBAconc*l,cym)
+cymchisq <- 1-pchisq(cymnrm$null.deviance - cymnrm$deviance , cymnrm$df.null - cymnrm$df.residual)
+```
+
+
+By comparing the null and residual devance using a chi square test, we obtain a p value of `r cymchisq`. As $\alpha$ = 0.05, p < $\alpha$, and we reject the null hypothesis and conclude that knowing the light and IBA concentration is helpful in predicting the number of roots and orchid has. 
+
+
+```{r cym 5}
+summary(cymnrm)
+```
+Here we see the terms for IBA concentration and the interaction term are statistically significant. This indicates that there is a plausible relationship between IBA concentration and the number of roots an orchid has as well as the interaction between the IBA concentration and the presence of light for the number of roots and orchid has. 
+
+### Subexperiment 2: Cattleya Maxima (11)
+
+#### Trait 1: Average Root Length
+
+Assumption Testing: 
+
+
+```{r cat 1}
+cat <-  orchidsfinal %>% filter(es=="11")
+catrnummIBA <- lm(rnum~IBAconc*l,cat)
+
+#Residuals
+catrnummIBAr <- tibble(
+  "fit" = catrnummIBA$fitted.values,
+  "resid" = catrnummIBA$residuals) %>% 
+  add_column("rstandardized"=rstandard(catrnummIBA))
+
+ggplot(catrnummIBAr,aes(x=fit,y=resid))+
+  geom_jitter(color="#226b26")+
+  geom_hline(yintercept = 0, linetype="dotted")+
+  labs(title = paste("Gráfico Residual de Longitud Promedio de Raíces del Cattleya maxima (11)"),
+       subtitle = "de Ciro Yu")+ 
+  ylab("Residuals")+
+  xlab("Bondad de Ajuste")+
+  theme(plot.title = element_text(size = 14))
+
+bptest(catrnummIBA,studentize = FALSE)
+
+ggplot(data = catrnummIBAr, aes(sample = resid))+
+  geom_qq( color="#3dbc42")+
+  geom_qq_line( color="#273d67")+
+  labs(
+    title = paste("Gráfico QQ de Longitud Promedio de Raíces del Cattleya maxima (11)"),
+    subtitle = "de Ciro Yu"
+  ) +
+  xlab("Cuantiles teóricos")+
+  ylab("Cuantiles de muestra")
+
+shapiro.test(catrnummIBA$residuals)
+```
+
+
+Unfortunately in this case, our assumptions are violated. 
+
+- The residual plot shows a clear funnel shape, indicate nonconstant error variance (Heteroscedasticity). Additionally, the Breusch-Pagan test is very significant
+
+- The QQ plot is not well fitted to the line in the middle section and ends, indicating nonnormality of error variance. Additionally, the Shapiro-Wilk test is significant. 
+
+- Independence is still assumed due to the randomization of the experiment. 
+
+A log, log-log, and box cox transformations were tried with this data, but none reduced Heteroscedasticity or nonormality significantly. A 2 part model was also attempted, but the results of said model were not significant. Thus, the linear model continued to be used. 
+
+```{r cat 2}
+summary(catrnummIBA)
+```
+
+
+The overall p value is significant at $\alpha$ = 0.05. The values for IBA concentration, light, and their interactions were all significant, with Light having a positive term and the other 2 being negative. That means that on average, an increase in 1 mg/L of IBA in the media will cause a 3.413 mm decrease in average root length for the orchid. In the light condition, this increases to  -7.523 mm per mg/L, but from a higher inital value. 
+
+#### Trait 2: Root Number
+
+Assumption Analysis
+
+```{r cat 3}
+dispersiontest(glm(nr~IBAconc*l,cat,family=poisson))
+```
+
+As with the *Cymbidium* data, our p value for overdispersion is under 0.05. This indicates that there is statistically significant evidence that the data is overdispered, and a negative binomial is appropriate. 
+
+Negative Binomial Analysis
+
+```{r cat 4}
+catnrm <- glm.nb(nr~IBAconc*l,cat)
+catchisq <- 1-pchisq(catnrm$null.deviance - catnrm$deviance , catnrm$df.null - catnrm$df.residual)
+catchisq
+
+```
+By comparing the null and residual deviance using a chi square test, we obtain a p value of `r catchisq`. As $\alpha$ = 0.05, p < $\alpha$, and we reject the null hypothesis and conclude that knowing the light level or the IBA concentration is helpful in predicting the number of roots and orchid has. 
+
+```{r cat2}
+summary(catnrm)
+save(cat,file="Data/cat.Rdata")
+save(cym,file="Data/cym.Rdata")
+```
+
+Looking at our table, we see that the term for the IBA concentration is significant at $\alpha$ = 0.05. That means that we have statistical evidence to conclude that IBA concentration of the media has an effect on the number of roots for an orchid. Since the value of the estimated coefficient is negative, an increase in IBA concentration seems to decrease the number of roots an orchid has.As the coefficients for light and interaction between light and IBA concentration were not significant, a reduced model was fitted, but 2x log likelihood increased while the AIC did not decrease, so we went with the full model for a better fit. 
+
+
+

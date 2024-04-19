@@ -1,0 +1,78 @@
+---
+title: "Discusión-de-Datos-de-Orquídeas"
+author: "Jerry Yu"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(here)
+library(tinytex)
+library(ggpubr)
+install.packages("ggpubr")
+```
+Nuestro experimento encontró que niveles más altos de IBA disminuyeron el número de raíces por planta para el *Híbrido Cymbidium* y para *Cattleya maxima*, y disminuyeron la longitud promedio de la raíz para *Cattleya maxima*. Mientras tanto, el crecimiento de las plantas en luz aumentó la longitud promedio de la raíz para *Cattleya maxima*. Cuando se usaron en conjunto, la luz y las concentraciones más altas de IBA aumentaron el número de raíces para el *Híbrido Cymbidium*, pero disminuyeron la longitud promedio de la raíz para *Cattleya maxima*. Se proporcionan gráficos de interacción para los análisis significativos a continuación. 
+
+> Our Experiment found that higher levels of IBA decreased root number per plant for the *Cymbidium* hybrid and for *Cattleya maxima*, and decreased average root length for *Cattleya maxima*. Meanwhile, growing the plants in light increased average root length for *Catteleya maxima*. When used in conjunction, light and higher IBA concentrations increased root number for the *Cymbidium* hybrid, but decreased average root length for *Cattleya maxima*. Interaction plots for the significant analyses are provided below. 
+
+```{r int, warning=FALSE, message=FALSE}
+load("Data/cat.Rdata")
+load("Data/cym.Rdata")
+
+cymintpnr <- cym %>% group_by(IBAconc,l) %>% summarize(m=mean(nr)) %>% add_column()
+a <- ggplot(cymintpnr,aes(IBAconc,m,color=l)) +
+  geom_point() +
+  geom_line() +
+  labs(
+  title = paste("Híbrida Cymbidium (10)"),
+  subtitle = "de Ciro Yu"
+) +
+  xlab("Concentración de IBA")+
+  ylab("Numero")
+  
+catintprum <- cat %>% group_by(IBAconc,l) %>% summarize(m=mean(rnum))
+b <- ggplot(catintprum,aes(IBAconc,m,color=l)) +
+  geom_point() +
+  geom_line() +
+  labs(
+  title = paste("Cattleya maxima (11)"),
+  subtitle = "de Ciro Yu"
+) +
+  xlab("Concentración de IBA")+
+  ylab("Longitud Promedio")
+
+
+catintpnr <- cat %>% group_by(IBAconc,l) %>% summarize(m=mean(nr))
+c <- ggplot(catintpnr,aes(IBAconc,m,color=l)) +
+  geom_point() +
+  geom_line() +
+  labs(
+  title = paste("Cattleya maxima (11)"),
+  subtitle = "de Ciro Yu"
+) +
+  xlab("concentración de IBA")+
+  ylab("Numero")
+
+ga <- ggarrange(b,c,a,nrow=2,ncol=2) 
+
+annotate_figure(ga,top="Trama de Interacción")
+```
+Los descubrimiento consistentes de un efecto negativo de IBA en nuestros 2 parámetros de enraizamiento van en contra de nuestra hipótesis inicial, pero son comprensibles. Esto se debe a que mientras que IBA se utiliza para imitar el enraizamiento, estudios anteriores han mostrado que inhibe la elongación y maduración de las raíces a concentraciones altas. Por lo tanto, nuestras concentraciones, que van de 1 a 5 mg/L, probablemente fueron demasiado altas para tener un efecto beneficioso en nuestras orquídeas.
+
+> The consistent findings of a negative effect of IBA on our 2 parameters of rooting goes against our initial hypothesis, but is understandable. This is because while IBA is used to imitate rooting, previous studies have shown that it inhibits root elongation and maturation at high concentrations. Our concentrations, ranging from 1 to 5 mg/L, were thus likely too high to have a beneficial effect on our orchids. 
+
+Los resultados relativamente inconsistentes para la luz de nuestro análisis indican que hay más variación en el efecto de la luz en el enraizamiento de lo previsto para nuestra hipótesis. Sin embargo, en línea con nuestra hipótesis, agregar luz tuvo un efecto neutral o beneficioso en el enraizamiento de las orquídeas. Además, el enraizamiento es solo un componente de la salud de la orquídea y la idoneidad para la trasplante. Las imágenes tomadas durante el experimento mostraron consistentemente un aumento en la clorofila y el grosor de las hojas para las orquídeas cultivadas bajo luz, aunque esto no se cuantificó. Para las orquídeas epífitas, estos rasgos son beneficiosos para la supervivencia de las orquídeas que se someten a la trasplante. Por lo tanto, la investigación futura podría centrarse en estos rasgos.
+
+> The relatively inconsistent results for light from our analysis indicate that there is more variation on effect of light on rooting than predicted for our hypothesis. However, in line with our hypothesis, adding light had either a neutral or beneficial effect on rooting for the orchids. Additionally, rooting is only a component of orchid health and suitability for deflasking. Pictures taken during the experiment consistently showed an increase in chlorophyll and leaf thickness for the orchids grown under light, though this was not quantified. For epiphytic orchids, these traits are beneficial for surviablity of orchids undergoing deflasking. Thus, future research migh focus on these traits. 
+
+El análisis experimental de este ensayo tuvo 2 defectos importantes. En primer lugar, cuando se recopilaron los datos, no se registró la matraz del que cada orquídea procedía. Esto es un problema porque las orquídeas cultivadas en un solo flasko estarán expuestas a un conjunto de condiciones ambientales mucho más consistentes, por lo que no son totalmente independientes. Otro problema surgió en los datos de longitud de la raíz de *Cattleya maxima*. Debido a que ninguno de los tratamientos de 5 mg/L de IBA enraizó, los datos se enriquecieron con un gran número de ceros. Por lo tanto, ninguno de los supuestos de Homocedasticidad o Normalidad se mantuvo, por lo que el análisis posterior es algo sospechoso.Probé muchos métodos para corregir los datos, pero ninguno funcionó mientras matentiendo un tamaño de muestra suficiente, así que elegí usar el mismo análisis que los demás datos.
+
+> The experimental analysis for this trial suffered from 2 major flaws. Firstly, when data was collected, the flask that each orchids originated from was not recorded. This is a problem because the orchids grown in a single flask are going to be exposed to a far more consistent set of environmental conditions, and are thus not fully independent. Another problem arose in the *Cattleya maxima* root length data. Because none of the 5 mg/L IBA treatments rooted, the data was enriched with a large number of zeros. Thus, none of the assumptions for Homoscedasticity or Normality held, so the subsequent analysis is somewhat suspect. I tried many methods to transform the *Cattleya maxima* data, but none were sufficient to fix the irreglarities while maintinaing a sufficiently large sample size, so chose the linear model to maintain consistency with the *Cymbidium* data. 
+
+En general, dado que las concentraciones altas de IBA disminuyeron consistentemente tanto la longitud como el número de raíces, y la luz aumentó o mejoró la longitud y el número de raíces en la formulación p4, sugeriría cultivar orquídeas en el medio p4 con la luz para fomentar mejor el enraizamiento y la preparación para la desflaskación.
+
+> Thus in general, as high IBA concentrations consistently decreased both root length and root number, and light either increased or improve root length and number at the p4 formulation, I would suggest growing orchids in p4 medium with exposure to light to best encourage rooting an readiness for deflasking. 
+
+
